@@ -9,7 +9,7 @@ services:
       - --api.dashboard=false
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
-      - --providers.docker.network=deploy-net
+      - --providers.docker.network=deploy-manager_deploy-net
       - --entrypoints.web.address=:80
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
       - --entrypoints.web.http.redirections.entrypoint.scheme=https
@@ -79,10 +79,10 @@ services:
       - traefik.http.routers.health.middlewares=security-headers
 
       # ── API (internal — restrict to VPN/trusted IPs via ipallowlist) ────────
-      - traefik.http.routers.api.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/`)
-      - traefik.http.routers.api.entrypoints=websecure
-      - traefik.http.routers.api.tls.certresolver=le
-      - traefik.http.routers.api.middlewares=security-headers,api-allowlist
+      - traefik.http.routers.dm-api.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/`)
+      - traefik.http.routers.dm-api.entrypoints=websecure
+      - traefik.http.routers.dm-api.tls.certresolver=le
+      - traefik.http.routers.dm-api.middlewares=security-headers,api-allowlist
 
       # ── Metrics (internal — restrict to Prometheus scraper) ─────────────────
       - traefik.http.routers.metrics.rule=Host(`${DOMAIN}`) && Path(`/metrics`)
