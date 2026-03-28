@@ -16,6 +16,8 @@ function buildTransports(): pino.TransportMultiOptions['targets'] {
       target: 'pino-loki',
       options: {
         host: lokiHost,
+        replaceTimestamp: true,
+        convertArrays: true,
         labels: {
           job: 'deploy-manager',
           service: 'deploy-manager',
