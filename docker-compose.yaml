@@ -56,6 +56,7 @@ services:
         condition: service_healthy
     networks:
       - deploy-net
+      - loki-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
@@ -148,3 +149,6 @@ volumes:
 networks:
   deploy-net:
     driver: bridge
+  loki-net:
+    external: true
+    name: docker_default
