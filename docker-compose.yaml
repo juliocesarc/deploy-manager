@@ -50,6 +50,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /projects:/projects:rw
       - manager-data:/data
+      - /root/.docker:/home/node/.docker:ro
     depends_on:
       postgres:
         condition: service_healthy
