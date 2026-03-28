@@ -33,6 +33,7 @@ services:
       dockerfile: Dockerfile
     container_name: deploy-manager
     restart: unless-stopped
+    user: "${MANAGER_UID:-1000}:${DOCKER_GID:-999}"
     environment:
       NODE_ENV: production
       PORT: 3000
