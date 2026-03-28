@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+nginx/ssl/*.pem
+nginx/ssl/*.key
+*.log
+coverage/

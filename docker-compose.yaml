@@ -1,0 +1,149 @@
+version: "3.8"
+
+services:
+  traefik:
+    image: traefik:v3.3
+    container_name: deploy-traefik
+    restart: unless-stopped
+    command:
+      - --api.dashboard=false
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=deploy-net
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.tlschallenge=true
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certs:/letsencrypt
+    networks:
+      - deploy-net
+
+  manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: deploy-manager
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgresql://deploy:${POSTGRES_PASSWORD}@postgres:5432/deployments
+      REDIS_URL: redis://redis:6379
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET}
+      PROJECTS_DIR: /projects
+      BACKUPS_DIR: /data/backups
+      DEFAULT_HEALTH_CHECK_TIMEOUT: ${DEFAULT_HEALTH_CHECK_TIMEOUT:-60}
+      DEFAULT_HEALTH_CHECK_INTERVAL: ${DEFAULT_HEALTH_CHECK_INTERVAL:-2000}
+      LOKI_HOST: ${LOKI_HOST:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /projects:/projects:rw
+      - manager-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - deploy-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    labels:
+      - traefik.enable=true
+
+      # ── Webhook (public) ────────────────────────────────────────────────────
+      - traefik.http.routers.webhook.rule=Host(`${DOMAIN}`) && PathPrefix(`/webhook/`)
+      - traefik.http.routers.webhook.entrypoints=websecure
+      - traefik.http.routers.webhook.tls.certresolver=le
+      - traefik.http.routers.webhook.middlewares=security-headers,body-limit
+
+      # ── Health (public) ─────────────────────────────────────────────────────
+      - traefik.http.routers.health.rule=Host(`${DOMAIN}`) && Path(`/health`)
+      - traefik.http.routers.health.entrypoints=websecure
+      - traefik.http.routers.health.tls.certresolver=le
+      - traefik.http.routers.health.middlewares=security-headers
+
+      # ── API (internal — restrict to VPN/trusted IPs via ipallowlist) ────────
+      - traefik.http.routers.api.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/`)
+      - traefik.http.routers.api.entrypoints=websecure
+      - traefik.http.routers.api.tls.certresolver=le
+      - traefik.http.routers.api.middlewares=security-headers,api-allowlist
+
+      # ── Metrics (internal — restrict to Prometheus scraper) ─────────────────
+      - traefik.http.routers.metrics.rule=Host(`${DOMAIN}`) && Path(`/metrics`)
+      - traefik.http.routers.metrics.entrypoints=websecure
+      - traefik.http.routers.metrics.tls.certresolver=le
+      - traefik.http.routers.metrics.middlewares=metrics-allowlist
+
+      # ── Service ─────────────────────────────────────────────────────────────
+      - traefik.http.services.manager.loadbalancer.server.port=3000
+
+      # ── Middlewares ─────────────────────────────────────────────────────────
+      - traefik.http.middlewares.security-headers.headers.frameDeny=true
+      - traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.security-headers.headers.browserXssFilter=true
+      - traefik.http.middlewares.security-headers.headers.stsSeconds=31536000
+      - traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true
+      - traefik.http.middlewares.security-headers.headers.stsPreload=true
+
+      - traefik.http.middlewares.body-limit.buffering.maxRequestBodyBytes=1048576
+
+      # Uncomment and set your trusted IP ranges:
+      # - traefik.http.middlewares.api-allowlist.ipallowlist.sourcerange=10.0.0.0/8
+      # - traefik.http.middlewares.metrics-allowlist.ipallowlist.sourcerange=<prometheus-ip>/32
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: deploy-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: deployments
+      POSTGRES_USER: deploy
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - deploy-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deploy -d deployments"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: deploy-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - deploy-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+  redis-data:
+  manager-data:
+  traefik-certs:
+
+networks:
+  deploy-net:
+    driver: bridge
