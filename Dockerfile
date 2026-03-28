@@ -13,7 +13,7 @@ RUN npm run build
 FROM node:20-alpine AS runtime
 
 # Install curl (needed for health checks inside the container) and docker CLI
-RUN apk add --no-cache curl docker-cli
+RUN apk add --no-cache curl docker-cli docker-cli-compose
 
 WORKDIR /app
 
