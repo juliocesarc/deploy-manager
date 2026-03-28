@@ -1,25 +1,36 @@
-import fastify from 'fastify'
+import fastify, { FastifyRequest } from 'fastify'
 import rateLimit from '@fastify/rate-limit'
-import fastifyRawBody from 'fastify-raw-body'
 import { logger } from '@/logger'
 import { webhookRoutes } from './http/controllers/webhook/routes'
 import { deploymentsRoutes } from './http/controllers/deployments/routes'
 import { healthRoutes } from './http/controllers/health/routes'
 
-export const app = fastify()
+export const app = fastify({ trustProxy: true })
 
 app.register(rateLimit, {
   max: 60,
   timeWindow: '1 minute',
   allowList: ['127.0.0.1'],
-  keyGenerator: (req) => req.ip,
+  keyGenerator: (req: FastifyRequest) => req.ip,
   errorResponseBuilder: () => ({
     success: false,
     message: 'Too many requests',
   }),
 })
 
-app.register(fastifyRawBody, { field: 'rawBody', global: false, encoding: 'utf8', runFirst: true })
+// Capture raw body for HMAC signature verification on webhook routes
+app.addContentTypeParser(
+  'application/json',
+  { parseAs: 'buffer' },
+  (req: FastifyRequest, body, done) => {
+    try {
+      (req as FastifyRequest & { rawBody: Buffer }).rawBody = body as Buffer
+      done(null, JSON.parse((body as Buffer).toString()))
+    } catch (err) {
+      done(err as Error, undefined)
+    }
+  },
+)
 
 app.register(webhookRoutes)
 app.register(deploymentsRoutes)

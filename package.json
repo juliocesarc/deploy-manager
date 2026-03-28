@@ -17,7 +17,6 @@
     "bullmq": "^5.7.0",
     "dotenv": "^16.4.5",
     "fastify": "^4.27.0",
-    "fastify-raw-body": "^5.0.0",
     "ioredis": "^5.3.2",
     "pg": "^8.11.5",
     "pino": "^9.2.0",

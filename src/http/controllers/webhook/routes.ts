@@ -11,11 +11,10 @@ import { metrics } from '@/metrics'
 const VALID_ENVIRONMENTS = new Set(['stage', 'prod'])
 
 export async function webhookRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/webhook/deploy', { config: { rawBody: true } }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/webhook/deploy', async (req: FastifyRequest, reply: FastifyReply) => {
     const signature = req.headers['x-hub-signature-256'] as string | undefined
-    const rawBody = (req as FastifyRequest & { rawBody?: string }).rawBody
-      ? Buffer.from((req as FastifyRequest & { rawBody: string }).rawBody)
-      : Buffer.from(JSON.stringify(req.body))
+    const rawBody = (req as FastifyRequest & { rawBody?: Buffer }).rawBody
+      ?? Buffer.from(JSON.stringify(req.body))
 
     if (!validateSignature(rawBody, signature, env.GITHUB_WEBHOOK_SECRET)) {
       metrics.webhookRequests.inc({ status: 'unauthorized' })
